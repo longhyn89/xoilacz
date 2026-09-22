@@ -67,11 +67,57 @@ async function findWorkingDomain() {
   return null;
 }
 
+// Hàm lấy dữ liệu cho từng môn thể thao (Có Retry 2 lần)
+async function fetchCategoryWithRetry(activeDomain, cat, baseUrl) {
+  const targetUrl = `${activeDomain}/sport/${cat.slug}/load-more/home/page/0/per/20?t=${Math.floor(Date.now() / 1000)}`;
+  
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await fetchWithTimeout(targetUrl, { "Referer": `${activeDomain}/` }, 4500);
+      if (!res.ok) {
+        if (attempt === 2) return "";
+        continue;
+      }
+      
+      const rawText = await res.text();
+      if (!rawText || !rawText.trim().startsWith("{")) {
+        if (attempt === 2) return "";
+        continue;
+      }
+
+      const json = JSON.parse(rawText);
+      const html = json?.data?.html;
+      if (!html) return ""; // Môn này hiện không có trận nào đang/sắp diễn ra
+
+      const pattern = /<a\b(?=[^>]*\bclass\s*=\s*["'][^"']*\bredirectPopup\b[^"']*["'])(?=[^>]*\bhref\s*=\s*["']([^"']+)["'])(?=[^>]*\btitle\s*=\s*["']([^"']+)["'])[^>]*>/gi;
+      let match;
+      let categoryContent = "";
+
+      while ((match = pattern.exec(html)) !== null) {
+        let matchLink = match[1].startsWith("http") ? match[1] : `${activeDomain}${match[1].startsWith("/") ? "" : "/"}${match[1]}`;
+        let rawTitle = match[2] || "";
+        let timeMatch = rawTitle.match(/^(.*?)\s+lúc\s+(.*?)(?:\s+ngày\s+(.*))?$/i);
+        let finalTitle = timeMatch 
+          ? `${timeMatch[2].trim().replace(":", "h")} ${timeMatch[3] ? `ngày ${timeMatch[3].trim()} ` : ""}${cat.emoji} ${timeMatch[1].trim()}` 
+          : `${cat.emoji} ${rawTitle.trim()}`;
+
+        categoryContent += `#EXTINF:-1 tvg-logo="${FALLBACK_LOGO}" group-title="Xôi Lạc Z TV Dự Phòng", ${finalTitle}\n`;
+        categoryContent += `${baseUrl}/play?link=${encodeURIComponent(matchLink)}\n`;
+      }
+      return categoryContent;
+    } catch (err) {
+      if (attempt === 2) return "";
+      // Chờ 150ms trước khi thử lại lần 2
+      await new Promise(r => setTimeout(r, 150));
+    }
+  }
+  return "";
+}
+
 export default async function handler(request) {
   const url = new URL(request.url);
   const path = url.pathname;
   
-  // Xác định host đang gọi (Cloudflare Worker hoặc Vercel)
   const clientHost = request.headers.get("x-forwarded-host") || url.host;
   const protocol = request.headers.get("x-forwarded-proto") || url.protocol.replace(":", "");
   const baseUrl = `${protocol}://${clientHost}`;
@@ -174,44 +220,17 @@ export default async function handler(request) {
   }
 
   // ---------------------------------------------------------
-  // PHẦN B: Lấy dữ liệu Nguồn 2 (Live)
+  // PHẦN B: Lấy dữ liệu Nguồn 2 (Live Xôi Lạc)
   // ---------------------------------------------------------
   const activeDomain = await findWorkingDomain();
   if (activeDomain) {
-    const fetchPromises = CATEGORIES.map(async (cat) => {
-      try {
-        const targetUrl = `${activeDomain}/sport/${cat.slug}/load-more/home/page/0/per/20?t=${Math.floor(Date.now() / 1000)}`;
-        const res2 = await fetchWithTimeout(targetUrl, { "Referer": `${activeDomain}/` }, 5000);
-        if (!res2.ok) return "";
-        
-        const rawText = await res2.text();
-        const json = JSON.parse(rawText);
-        const html = json?.data?.html;
-        if (!html) return "";
-
-        const pattern = /<a\b(?=[^>]*\bclass\s*=\s*["'][^"']*\bredirectPopup\b[^"']*["'])(?=[^>]*\bhref\s*=\s*["']([^"']+)["'])(?=[^>]*\btitle\s*=\s*["']([^"']+)["'])[^>]*>/gi;
-        let match;
-        let categoryContent = "";
-
-        while ((match = pattern.exec(html)) !== null) {
-          let matchLink = match[1].startsWith("http") ? match[1] : `${activeDomain}${match[1].startsWith("/") ? "" : "/"}${match[1]}`;
-          let rawTitle = match[2] || "";
-          let timeMatch = rawTitle.match(/^(.*?)\s+lúc\s+(.*?)(?:\s+ngày\s+(.*))?$/i);
-          let finalTitle = timeMatch 
-            ? `${timeMatch[2].trim().replace(":", "h")} ${timeMatch[3] ? `ngày ${timeMatch[3].trim()} ` : ""}${cat.emoji} ${timeMatch[1].trim()}` 
-            : `${cat.emoji} ${rawTitle.trim()}`;
-
-          categoryContent += `#EXTINF:-1 tvg-logo="${FALLBACK_LOGO}" group-title="Xôi Lạc Z TV Dự Phòng", ${finalTitle}\n`;
-          categoryContent += `${baseUrl}/play?link=${encodeURIComponent(matchLink)}\n`;
-        }
-        return categoryContent;
-      } catch (err) { 
-        return ""; 
+    // Gọi tuần tự từng môn thể thao để tránh bị WAF chặn
+    for (const cat of CATEGORIES) {
+      const categoryContent = await fetchCategoryWithRetry(activeDomain, cat, baseUrl);
+      if (categoryContent) {
+        combinedM3U += categoryContent;
       }
-    });
-
-    const results = await Promise.all(fetchPromises);
-    combinedM3U += results.join("");
+    }
   }
 
   return new Response(combinedM3U, {
