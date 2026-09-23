@@ -2,7 +2,7 @@ export const config = {
   runtime: 'edge',
 };
 
-const ORIGIN_URL_STATIC = "https://tinyurl.com/ttthethao5"; // Nguồn 1 (xoilacz1)
+const ORIGIN_URL_STATIC = "https://tinyurl.com/ttthethao6"; // Nguồn 1 (xoilacz1)
 const ROOT_DOMAINS = [
   "https://xoilacz.io",
   "https://xoilaczzh.cc",
