@@ -102,6 +102,8 @@ async function fetchCategoryWithRetry(activeDomain, cat, baseUrl) {
           : `${cat.emoji} ${rawTitle.trim()}`;
 
         categoryContent += `#EXTINF:-1 tvg-logo="${FALLBACK_LOGO}" group-title="Xôi Lạc Z TV Dự Phòng", ${finalTitle}\n`;
+        categoryContent += `#EXTVLCOPT:http-user-agent=Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Mobile Safari/537.36\n`;
+        categoryContent += `#EXTVLCOPT:http-referrer=https://xlz.domainkqt.cc/\n`;
         categoryContent += `${baseUrl}/play?link=${encodeURIComponent(matchLink)}\n`;
       }
       return categoryContent;
