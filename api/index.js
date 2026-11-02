@@ -4,8 +4,8 @@ export const config = {
 
 const ORIGIN_URL_STATIC = "https://tinyurl.com/ttthethao6"; // Nguồn 1 (xoilacz1)
 const ROOT_DOMAINS = [
+  "https://xoilacz.ca",
   "https://xoilacz.io",
-  "https://xoilaczzh.cc",
   "https://xoilacz.live"
 ];
 const FALLBACK_LOGO = "https://i.ibb.co/m5rVgxZB/xoilacz-plugin.png";
